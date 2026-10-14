@@ -21,11 +21,12 @@ logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(
 logger = logging.getLogger("netprobe.client")
 
 
-def parse_ports(spec: str) -> List[int]:
-    """Parses port specification: 'all', '1-65535', '80,443', '9000-9010'."""
+def parse_ports(spec: str, exclude_ports: Set[int] = None) -> List[int]:
+    """Parses port specification: 'all', '1-65535', '80,443', '9000-9010' excluding critical ports."""
     spec = spec.strip().lower()
+    excluded = exclude_ports or {22, 8765}
     if spec == "all":
-        return list(range(1, 65536))
+        return [p for p in range(1, 65536) if p not in excluded]
     ports: Set[int] = set()
     for part in spec.split(","):
         part = part.strip()
@@ -36,7 +37,7 @@ def parse_ports(spec: str) -> List[int]:
             ports.update(range(start, end + 1))
         else:
             ports.add(int(part))
-    return sorted(list(ports))
+    return sorted(list(ports - excluded))
 
 
 class NetProbeClient:
@@ -199,7 +200,7 @@ def main():
     parser.add_argument("--no-scan-first", action="store_true", help="Force running all scenarios on all ports without initial SYN probe")
 
     args = parser.parse_args()
-    ports = parse_ports(args.ports)
+    ports = parse_ports(args.ports, exclude_ports={22, args.control_port})
 
     client = NetProbeClient(
         server_ip=args.server_ip,

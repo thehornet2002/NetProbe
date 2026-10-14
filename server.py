@@ -17,11 +17,12 @@ logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(
 logger = logging.getLogger("netprobe.server")
 
 
-def parse_ports(spec: str) -> List[int]:
-    """Parses port specification: 'all', '1-65535', '80,443', '9000-9010'."""
+def parse_ports(spec: str, exclude_ports: Set[int] = None) -> List[int]:
+    """Parses port specification: 'all', '1-65535', '80,443', '9000-9010' excluding system/control ports."""
     spec = spec.strip().lower()
+    excluded = exclude_ports or {22, 8765}
     if spec == "all":
-        return list(range(1, 65536))
+        return [p for p in range(1, 65536) if p not in excluded]
     ports: Set[int] = set()
     for part in spec.split(","):
         part = part.strip()
@@ -32,7 +33,7 @@ def parse_ports(spec: str) -> List[int]:
             ports.update(range(start, end + 1))
         else:
             ports.add(int(part))
-    return sorted(list(ports))
+    return sorted(list(ports - excluded))
 
 
 class NetProbeServer:
@@ -69,7 +70,7 @@ class NetProbeServer:
 
     async def _passive_responder_loop(self):
         """Passively answers incoming SYN or test packets with standard TCP responses across all configured ports."""
-        bpf = f"tcp and src host {self.client_ip}"
+        bpf = f"tcp and src host {self.client_ip} and not dst port 22 and not dst port {self.control_port}"
         logger.info(f"Server passive responder active on BPF: {bpf}")
 
         loop = asyncio.get_running_loop()
@@ -81,7 +82,8 @@ class NetProbeServer:
                 dst_p = tcp.dport
                 src_p = tcp.sport
 
-                if len(self.target_ports) < 65535 and dst_p not in self.target_ports:
+                # Strictly protect SSH, WS control, and unconfigured ports
+                if dst_p in (22, self.control_port) or dst_p not in self.target_ports:
                     return
 
                 # If client sent SYN, respond with SYN-ACK from that specific port
@@ -153,7 +155,7 @@ def main():
     parser.add_argument("--iface", default=None, help="Network Interface Name")
 
     args = parser.parse_args()
-    ports = parse_ports(args.ports)
+    ports = parse_ports(args.ports, exclude_ports={22, args.control_port})
 
     server = NetProbeServer(
         bind_ip=args.bind_ip,

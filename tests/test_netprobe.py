@@ -94,9 +94,10 @@ def test_parse_ports():
     assert parse_ports("80,443") == [80, 443]
     assert parse_ports("8000-8003") == [8000, 8001, 8002, 8003]
     all_p = parse_ports("all")
-    assert len(all_p) == 65535
-    assert all_p[0] == 1
-    assert all_p[-1] == 65535
+    # 65535 minus excluded ports (22, 8765)
+    assert len(all_p) == 65533
+    assert 22 not in all_p
+    assert 8765 not in all_p
 
 
 def test_scenarios_count():
