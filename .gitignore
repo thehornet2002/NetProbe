@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated Test Reports & Artifacts
+netprobe_report.html
+*.pcap
+
+# OS & IDE
+.idea/
+.vscode/
+*.swp
+Thumbs.db
