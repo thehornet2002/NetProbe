@@ -19,7 +19,7 @@ class ControlWSClient:
         for attempt in range(1, retry_count + 1):
             try:
                 logger.info(f"Connecting to Control Server at {self.uri} (Attempt {attempt}/{retry_count})...")
-                self.ws = await websockets.connect(self.uri)
+                self.ws = await websockets.connect(self.uri, ping_interval=None)
                 logger.info("Connected to Control Server.")
                 return True
             except Exception as e:

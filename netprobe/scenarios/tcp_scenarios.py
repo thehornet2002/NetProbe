@@ -202,7 +202,7 @@ class ScenarioTCP08_FlagCWR(BaseScenario):
     field_tested = "Flags: CWR"
 
     def execute(self, stack, direction: str = "Client -> Server") -> TestResult:
-        pkt = stack.build_packet(flags="CWA", payload=b"CWR flag active")
+        pkt = stack.build_packet(flags="CA", payload=b"CWR flag active")
         resp, delay_ms, attempts, status = stack.send_and_wait_response(pkt)
         flags, details = _parse_resp(resp)
         return TestResult(
@@ -211,7 +211,7 @@ class ScenarioTCP08_FlagCWR(BaseScenario):
             category=self.category,
             field_tested=self.field_tested,
             original_val="flags=PA",
-            mutated_val="flags=CWA",
+            mutated_val="flags=CA",
             direction=direction,
             attempts_used=attempts,
             rtt_ms=delay_ms,

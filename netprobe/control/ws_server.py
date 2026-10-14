@@ -19,7 +19,7 @@ class ControlWSServer:
         self.on_message_callback: Optional[Callable[[Dict[str, Any]], None]] = None
 
     async def start(self):
-        self.server = await websockets.serve(self._handler, self.host, self.port)
+        self.server = await websockets.serve(self._handler, self.host, self.port, ping_interval=None)
         logger.info(f"WebSocket Control Server listening on ws://{self.host}:{self.port}")
 
     async def _handler(self, websocket):

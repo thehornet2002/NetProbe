@@ -66,6 +66,15 @@ class NetProbeClient:
         self.collector = ReportCollector()
         self.server_finished_event = asyncio.Event()
 
+        # Determine local network egress IP (handling NAT gracefully)
+        try:
+            from scapy.all import conf
+            self.local_ip = conf.route.route(self.server_ip)[1]
+            if self.local_ip != self.client_ip:
+                logger.info(f"Local interface IP {self.local_ip} will be used for outbound packet crafting (NAT: {self.client_ip}).")
+        except Exception:
+            self.local_ip = self.client_ip
+
     async def run(self):
         logger.info(f"Connecting to NetProbe Server at {self.server_ip}:{self.control_port}")
         connected = await self.ws_client.connect()
@@ -89,7 +98,7 @@ class NetProbeClient:
             # If scanning large port ranges (e.g. all 65535), probe responsiveness first
             if self.scan_first and len(self.target_ports) > 100:
                 logger.info(f"Initiating fast SYN probe across {len(self.target_ports)} ports...")
-                responsive_ports = self._probe_responsive_ports(self.target_ports)
+                responsive_ports = await self._probe_responsive_ports(self.target_ports)
                 logger.info(f"Discovered {len(responsive_ports)} responsive ports.")
                 ports_to_test = responsive_ports if responsive_ports else self.target_ports[:10]
 
@@ -107,7 +116,7 @@ class NetProbeClient:
             for port in ports_to_test:
                 src_p = random.randint(30000, 60000)
                 stack = UserSpaceTCPStack(
-                    src_ip=self.client_ip,
+                    src_ip=self.local_ip,
                     dst_ip=self.server_ip,
                     src_port=src_p,
                     dst_port=port,
@@ -146,16 +155,20 @@ class NetProbeClient:
         print(f"HTML Report Saved:    {report_file}")
         print("=" * 60)
 
-    def _probe_responsive_ports(self, port_list: List[int]) -> List[int]:
-        """Probes ports with raw SYN packets to filter active listeners."""
+    async def _probe_responsive_ports(self, port_list: List[int]) -> List[int]:
+        """Probes ports with raw SYN packets asynchronously to filter active listeners."""
         active = []
+        loop = asyncio.get_running_loop()
         for port in port_list:
             sport = random.randint(40000, 60000)
-            syn = IP(src=self.client_ip, dst=self.server_ip) / TCP(sport=sport, dport=port, flags="S", seq=1000)
+            syn = IP(src=self.local_ip, dst=self.server_ip) / TCP(sport=sport, dport=port, flags="S", seq=1000)
             self.pcap.send_packet(syn)
-            resp = self.pcap.sniff_one(
-                bpf_filter=f"tcp and src host {self.server_ip} and src port {port} and dst port {sport}",
-                timeout=0.08
+            resp = await loop.run_in_executor(
+                None,
+                lambda p=port, sp=sport: self.pcap.sniff_one(
+                    bpf_filter=f"tcp and src host {self.server_ip} and src port {p} and dst port {sp}",
+                    timeout=0.08
+                )
             )
             if resp and resp.haslayer(TCP):
                 active.append(port)
@@ -173,6 +186,7 @@ class NetProbeClient:
                     peer_response_flags=str(resp[TCP].flags),
                     details=f"Port {port} responded with flags {resp[TCP].flags}"
                 ))
+            await asyncio.sleep(0.001)
         return active
 
     async def _handle_control_message(self, msg: dict):
